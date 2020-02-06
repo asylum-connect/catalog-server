@@ -1,4 +1,4 @@
-# dev-test-models-sample-app
+# catalog-server
 A Flask API
 
 ## Dependencies
