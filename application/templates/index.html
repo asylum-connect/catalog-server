@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  </head>
+  <body>
+    <h1>Tell us about yourself!</h1>
+    <form action="{{ url_for('post') }}" method="POST">
+      <p>What is your name?</p>
+      <input placeholder="Freddie" name="firstname"/>
+      <input placeholder="Mercury" name="lastname"/>
+      <p>What is your email?</p>
+      <input placeholder="freddie.mercury@hotmail.com" style="width: 225px" name="email"/>
+      <p>What is your preferred language?</p>
+      <input placeholder="The Queen's English" style="width: 225px" name="language"/>
+      <br>
+      <br>
+      <button type="submit">Submit</button>
+    </form>
+  </body>
+</html>
