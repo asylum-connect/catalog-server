@@ -51,7 +51,6 @@ class Address(db.Model):
     lat = db.Column(db.REAL)
     lon = db.Column(db.REAL)
 
-    # entities = db.relationship('Entity', backref='address', lazy=True)
 
     @property
     def serialize(self):
@@ -158,7 +157,6 @@ class Entity(db.Model):
     last_verified = db.Column(db.DateTime)
     rating = db.Column(db.REAL)
     is_closed = db.Column(db.Boolean)
-    # phone = db.Column(db.String) # Create a phone table
     user_id = db.Column(db.String)
     website = db.Column(db.String)
 
@@ -168,8 +166,6 @@ class Entity(db.Model):
     comments = db.relationship('Comments', backref='entity', lazy=True)
     emails = db.relationship('Email', backref='entity', lazy=True)
     entity_languages = db.relationship('EntityLanguage', backref='entity', lazy=True)
-    # entity_properties = db.relationship('EntityProperty', backref='entity', lazy=True)
-    # entity_tags = db.relationship('EntityTag', backref='entity', lazy=True)
     phones = db.relationship('Phone', backref='entity', lazy=True)
     service_providers = db.relationship('ServiceProvider', backref='entity', lazy=True)
     user_favorites = db.relationship('UserFavorites', backref='entity', lazy=True)
@@ -181,7 +177,6 @@ class Entity(db.Model):
     def serialize(self):
         return {
             'name' : self.name,
-            'id' : self.id,
             'last_verified' : self.last_verified,
             'updated_at' : self.date_updated_ac,
             'website' : self.website,
@@ -196,16 +191,6 @@ class EntityLanguage(db.Model):
     description = db.Column(db.Text)
     notes = db.Column(db.Text)
 
-# class EntityProperty(db.Model):
-#     property_id = db.Column(db.Integer, db.ForeignKey('property.id'))
-#     id = db.Column(db.Integer, primary_key=True)
-#     entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
-
-# class EntityTag(db.Model):
-#     id = db.Column(db.CHAR(255), primary_key=True)
-#     entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
-#     tag_id = db.Column(db.CHAR(255), db.ForeignKey('tags.id'))
-
 class Organization(db.Model):
     __tablename__ = 'organization'
     id = db.Column(db.CHAR(255), primary_key=True)
@@ -217,8 +202,7 @@ class Organization(db.Model):
     @property
     def serialize(self):
         return {
-            'entity_id' : self.entity_id,
-            'organization_id_not_usefull' : self.id
+            'id' : self.id
         }
 
 class Property(db.Model):
@@ -232,7 +216,6 @@ class Property(db.Model):
         return {
             self.name : True
         }
-    # entity_properties = db.relationship('EntityProperty', backref='property', lazy=True)
 
 class Phone(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -283,13 +266,11 @@ class Services(db.Model):
 
     entity = db.relationship('Entity', backref="services", uselist=False)
     access = db.relationship('Access', backref="access", lazy=False)
-    # parent_organization = db.relationship('Organization', backref='services', lazy=True)
 
     @property
     def serialize(self):
         return {
-            'entity_id' : self.entity_id,
-            'service_id_not_usefull' : self.id,
+            'id' : self.id,
             'parent_organization_id' : self.parent_organization_id,
             'is_appointment' : self.appointment
         }
@@ -299,7 +280,6 @@ class Tags(db.Model):
     name = db.Column(db.String)
     parent_tag = db.Column(db.Integer, db.ForeignKey('tags.id'))
 
-    # entity_tags = db.relationship('EntityTag', backref='tag', lazy=True)
     @property
     def serialize(self):
         return {
