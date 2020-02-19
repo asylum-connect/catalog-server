@@ -68,12 +68,12 @@ def within_location_query(object_name,lat,lon, range):
 
     return text(query_template)
 
-def get_description(filtered_object, type_object, iso3_language = 'ENG'):
+def get_description(filtered_object, object_type, iso3_language = 'ENG'):
     """
         Returns an object joined with the description column based on filter
         language
     """
-    return filtered_object.outerjoin(EntityLanguage, type_object.entity_id == EntityLanguage.entity_id)\
+    return filtered_object.outerjoin(EntityLanguage, object_type.entity_id == EntityLanguage.entity_id)\
                 .add_columns(EntityLanguage.description)\
                 .filter(EntityLanguage.iso3_language == iso3_language)
 
@@ -102,13 +102,24 @@ def get_entity(entity):
 
     return dict(entity.serialize, **entity_extension)
 
+def get_object_description(objects, object_type, get_function, iso3_language = 'ENG', limit = 10):
+    """
+        Returns list of dictionaries of selected object with their languages
+        specific descriptions
+    """
+    object_collection = get_description(objects, object_type, iso3_language).limit(limit).all()
+
+    result_object = []
+    for object, description in object_collection:
+        result_object.append(get_function(object, description))
+
+    return result_object
+
 def get_organization(organization, description):
     """
         Returns dictionary of organization table with the inherited ones
         e.g: entity
     """
-    # import sys
-    # print(f'==============\n\nORG: {organization}', file=sys.stderr)
     deduplicate = lambda x: list(set(x))
 
     all_ratings = []
@@ -188,7 +199,7 @@ def get_tags(tag_collection):
 
     return tags
 
-def filter_query(object, query, range = 500):
+def filter_query(object, query, range = 5):
     """
         Returns an query object of the same type as the object given with
         the filter applied
@@ -213,7 +224,7 @@ def filter_query(object, query, range = 500):
 
     return query_object
 
-def filter_object(object, raw_query, range = 500):
+def filter_object(object, raw_query, range = 5):
     """
         Return a list of object filtered by the query as well as a limit per
         page based on query
@@ -269,37 +280,65 @@ def query_get_user(user_id):
     """
         Returns json object of one user given user_id
     """
-    users = AsylumSeeker.query.filter_by(user_id = user_id).one()
-    return jsonify(users = users.serialize)
+    users = AsylumSeeker.query.filter_by(user_id = user_id).one_or_none()
+
+    if users is None:
+        return not_found()
+    else:
+        return jsonify(users = users.serialize)
 
 
 @simpleApp.route('/asylum_connect/api/v1.0/organizations')
 def query_get_organizations():
     """
-        Returns json object of all organization
+        Returns json object of all organizations based on filters
+        specified by client
     """
     iso3_language = 'ENG' # Eventually property of user
     filtered_organization, limit = filter_object(Organization, request.args)
 
-    organization_collection = get_description(filtered_organization, Organization, iso3_language)\
-                                .limit(limit).all()
-    result = []
-
-    for organization, description in organization_collection:
-        result.append(get_organization(organization, description))
+    result = get_object_description(filtered_organization, Organization, get_organization, limit=limit)
 
     return jsonify(organization = result)
 
+@simpleApp.route('/asylum_connect/api/v1.0/organization/<id>')
+def query_get_organization(id):
+    """
+        Returns single organization. If column name is specified will return
+        single property
+    """
+    query_result = single_query(Organization, id)
+    if query_result is None:
+        return not_found()
+    else:
+        return jsonify(organization=get_organization(*query_result))
+
+@simpleApp.route('/asylum_connect/api/v1.0/organization/<id>/<column_name>')
+def query_get_organization_column(id, column_name):
+    """
+        Returns single service. If column name is specified will return
+        single property
+    """
+    query_result = single_query(Organization, id)
+
+    if query_result is None:
+        return not_found()
+
+    organization = get_organization(*query_result)
+
+    if column_name in organization.keys():
+        return jsonify({column_name : organization[column_name]})
+    else:
+        return not_found()
+
 @simpleApp.route('/asylum_connect/api/v1.0/services')
 def query_get_services():
-    iso3_language = 'ENG'
+    """
+        Returns json objects of all services based on filters specified by client
+    """
     filtered_service, limit = filter_object(Services, request.args)
 
-    service_collection = get_description(filtered_service, Services, iso3_language).limit(limit).all()
-
-    result = []
-    for service, description in service_collection:
-        result.append(get_service(service, description))
+    result = get_object_description(filtered_service, Services, get_service, limit=limit)
 
     return jsonify(opportunities=result)
 
@@ -333,35 +372,6 @@ def query_get_service_column(id, column_name):
     else:
         return not_found()
 
-@simpleApp.route('/asylum_connect/api/v1.0/organization/<id>')
-def query_get_organization(id):
-    """
-        Returns single organization. If column name is specified will return
-        single property
-    """
-    query_result = single_query(Organization, id)
-    if query_result is None:
-        return not_found()
-    else:
-        return jsonify(organization=get_organization(*query_result))
-
-@simpleApp.route('/asylum_connect/api/v1.0/organization/<id>/<column_name>')
-def query_get_organization_column(id, column_name):
-    """
-        Returns single service. If column name is specified will return
-        single property
-    """
-    query_result = single_query(Organization, id)
-
-    if query_result is None:
-        return not_found()
-
-    organization = get_organization(*query_result)
-
-    if column_name in organization.keys():
-        return jsonify({column_name : organization[column_name]})
-    else:
-        return not_found()
 
 @simpleApp.route('/asylum_connect/api/v1.0/locations')
 def query_get_locations():
@@ -378,3 +388,20 @@ def query_get_tags():
         print(f'{key} : {val}')
 
     return jsonify(tags = [t.serialize for t in Tags.query.all()])
+
+@simpleApp.route('/asylum_connect/api/v1.0/<user_id>/favorites')
+def query_get_favorite(user_id):
+    """
+        Returns all opportunities and servicess that are in user favorites
+    """
+    # Ideally you want to store services and opportunities
+    favorites = UserFavorites.query.filter_by(user_id = user_id).all()
+    entity_ids = [f.entity_id for f in favorites]
+
+    services = Services.query.filter(Services.entity_id.in_(entity_ids))
+    organizations = Organization.query.filter(Organization.entity_id.in_(entity_ids))
+
+    result_services = get_object_description(services, Services, get_service)
+    result_organization = get_object_description(organizations, Organization, get_organization)
+
+    return jsonify(favorites = {'organizations':result_organization, 'opportunities' : result_services})

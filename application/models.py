@@ -325,7 +325,6 @@ class Users(db.Model):
         }
 
 
-
 class UserFavorites(db.Model):
     id = db.Column(db.CHAR(255), primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
