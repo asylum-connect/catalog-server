@@ -12,5 +12,28 @@ A Flask API
 4. Run application in the virtual environment by executing `flask run`.
 5. Open browser and go to Flask's default port http://localhost:5000/.
 
-## Other information
+## Endpoints:
 * the base URL is http://localhost:5000/asylum_connect/api/v1.0/
+
+Currently all the routes are GET methods
+
+> GET /baseURL/user=1746
+
+RESPONSE
+```
+{
+    "users": {
+        "first_name": "Cam",
+        "last_name": "Mbayo",
+        "user_id": 1746
+    }
+}
+```
+
+> GET /baseURL/organizations
+GET /baseURL/services
+
+RESPONSE
+exhaustive list of organizations and service. Filters can be added
+
+> GET /baseURL/organizations
