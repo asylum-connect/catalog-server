@@ -30,10 +30,126 @@ RESPONSE
 }
 ```
 
+> GET /baseURL/1746/favorites
+
+RESPONSE
+```
+{
+    "favorites": {
+        "opportunities": [],
+        "organizations": [
+            {
+                ...
+                "id": "3f2e7b4b-a9fd-4b30-9af2-c02404320f11",
+                "is_closed": false,
+                "last_verified": "Sat, 01 Feb 2020 00:00:00 GMT",
+                ...
+                "phones": [
+                    {
+                        "digits": "2023555155",
+                        "id": 1,
+                        "is_primary": true,
+                        "phone_type": ""
+                    }
+                ],
+                "properties": {
+                    "cost-free": true,
+                    "not-req-medical-insurance": true,
+                    "service-county-maryland-montgomery": true
+                },
+                "rating": 0.0,
+                ...
+        ]
+    }
+}
+```
+
 > GET /baseURL/organizations
-GET /baseURL/services
+
+> GET /baseURL/services
 
 RESPONSE
 exhaustive list of organizations and service. Filters can be added
 
-> GET /baseURL/organizations
+same filters apply for organizations as well
+> GET /baseURL/services?query[properties][community-asylum-seeker]=true&query[properties][community-lgbt]=true&query[lat]=38.9656971&query[long]=-77.0622028&page=1&per_page=10
+
+RESPONSE
+```
+"opportunities": [
+        {
+            "access_instructions": [
+                {
+                    "access_type": "location",
+                    "access_value": "",
+                    "enabled_direct_acess": false,
+                    "id": 2,
+                    ...
+                },
+                {
+                    "access_type": "link",
+                    "access_value": "http://casaruby.org/contact.html",
+                    "enabled_direct_acess": false,
+                    "id": 1,
+                    ...
+                }
+            ],
+            "comment_count": 0,
+            "comments": [],
+            "description": "Casa Ruby's Drop Inn-Community Center is the only bilingual multicultural LGBT ..."
+            ...
+    ]
+```
+
+
+> GET /baseURL/organization/3f2e7b4b-a9fd-4b30-9af2-c02404320f11
+
+RESPONSE
+```
+{
+    "organization": {
+        "comment_count": 2,
+        "comments": [
+            {
+                "comment": "I think this is super cool",
+                "date_updated": "Sun, 02 Feb 2020 22:58:49 GMT",
+                "id": "35c9ed84-e2f5-4593-8723-99152a3d4897",
+                "user_id": 1746
+            },
+            {
+                "comment": "Again heavilty recommend",
+                ...
+            }
+        ],
+        ...
+        "schedule": {
+            "friday_end": "17:00:00",
+            "friday_start": "09:00:00",
+            ...
+        },
+        "tags": [],
+        "updated_at": "Sat, 01 Feb 2020 00:00:00 GMT",
+        ...
+    }
+}
+```
+
+For more granular information on specific organization or service you the column you want to extract
+> GET /baseURL/organization/3f2e7b4b-a9fd-4b30-9af2-c02404320f11/Comments
+
+```
+{
+    "comments": [
+        {
+            "comment": "I think this is super cool",
+            "date_updated": "Sun, 02 Feb 2020 22:58:49 GMT",
+            "id": "35c9ed84-e2f5-4593-8723-99152a3d4897",
+            "user_id": 1746
+        },
+        {
+            "comment": "Again heavilty recommend",
+            ...
+        }
+    ]
+}
+```
