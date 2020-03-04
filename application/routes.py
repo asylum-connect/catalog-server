@@ -109,7 +109,6 @@ def get_object_description(objects, object_type, get_function, iso3_language = '
         specific descriptions
     """
     temp = get_description(objects, object_type, iso3_language)
-    print(f'TYPE: {type(temp)} \nDIR:\n\n{dir(temp)}')
     object_collection = temp.limit(limit).offset(offset).all()
 
     result_object = []
