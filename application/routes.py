@@ -35,6 +35,7 @@ def parse_query(query):
         TODO: eventually want to clean this up once we connect it to the front
         end
     """
+    # query for tags in one degree is query[tags][]=tag_name
     tags = [tags_mapping(i) for i in query.getlist('query[tags][]')]
 
     sub = 'query[properties]'
@@ -102,12 +103,14 @@ def get_entity(entity):
 
     return dict(entity.serialize, **entity_extension)
 
-def get_object_description(objects, object_type, get_function, iso3_language = 'ENG', limit = 10):
+def get_object_description(objects, object_type, get_function, iso3_language = 'ENG', limit = 20, offset = 0):
     """
         Returns list of dictionaries of selected object with their languages
         specific descriptions
     """
-    object_collection = get_description(objects, object_type, iso3_language).limit(limit).all()
+    temp = get_description(objects, object_type, iso3_language)
+    print(f'TYPE: {type(temp)} \nDIR:\n\n{dir(temp)}')
+    object_collection = temp.limit(limit).offset(offset).all()
 
     result_object = []
     for object, description in object_collection:
@@ -232,13 +235,15 @@ def filter_object(object, raw_query, range = 5):
     if raw_query:
         query = parse_query(raw_query)
         limit = query['per_page']
+        offset = query['page']
         filtered_object = filter_query(object, query)
 
     else:
-        limit = 10
+        limit = 20
+        offset = 0
         filtered_object = object.query
 
-    return filtered_object, limit
+    return filtered_object, limit, offset
 
 def single_query(object, id, iso3_language = 'ENG',column_name = None):
     result_object = object.query.filter_by(id = id)
@@ -295,9 +300,9 @@ def query_get_organizations():
         specified by client
     """
     iso3_language = 'ENG' # Eventually property of user
-    filtered_organization, limit = filter_object(Organization, request.args)
+    filtered_organization, limit, offset = filter_object(Organization, request.args)
 
-    result = get_object_description(filtered_organization, Organization, get_organization, limit=limit)
+    result = get_object_description(filtered_organization, Organization, get_organization, limit=limit, offset=offset)
 
     return jsonify(organization = result)
 
@@ -336,7 +341,7 @@ def query_get_services():
     """
         Returns json objects of all services based on filters specified by client
     """
-    filtered_service, limit = filter_object(Services, request.args)
+    filtered_service, limit, offset = filter_object(Services, request.args)
 
     result = get_object_description(filtered_service, Services, get_service, limit=limit)
 
