@@ -15,7 +15,7 @@ A Flask API
 ## Endpoints:
 * the base URL is http://localhost:5000/asylum_connect/api/v1.0/
 
-Currently all the routes are GET methods
+Currently all the routes are GET or POST methods
 
 > GET /baseURL/user=1746
 
@@ -151,5 +151,43 @@ For more granular information on specific organization or service you the column
             ...
         }
     ]
+}
+```
+
+To retrieve all comments for all entities
+> GET /baseURL/comments
+
+RESPONSE
+```
+{
+"comments": [
+  {
+    "comment": "I think this is super cool",
+    "date_updated": "Sun, 02 Feb 2020 22:58:49 GMT",
+    "entity_id": "8202d4f3-fcc4-4e3a-9998-2f75439772a3                                                                                                                                                                                                                           ",
+    "id": "35c9ed84-e2f5-4593-8723-99152a3d4897",
+    "user_id": 1746
+  },
+  {
+    "comment": "Again heavilty recommend",
+    "date_updated": "Sun, 02 Feb 2020 22:59:32 GMT",
+    "entity_id": "8202d4f3-fcc4-4e3a-9998-2f75439772a3                                                                                                                                                                                                                           ",
+    "id": "8761b508-bc35-4784-acb1-2cca7e2045d6",
+    "user_id": 1746
+  },
+  ...
+}
+```
+
+> POST /organizations/<organization_id>/comment?comment=<comment_text>
+
+RESPONSE
+```
+{
+  "comment": {
+    "comment": "Comments are super cool!",
+    "date_updated": "Thu, 05 Mar 2020 15:32:55 GMT",
+    "id": "c2758384-1504-47b8-a85f-0a53e9a3f58f"
+  }
 }
 ```

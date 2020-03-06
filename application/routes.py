@@ -1,6 +1,7 @@
 import random, uuid
 import numpy as np
 from application import simpleApp, db
+from datetime import datetime
 from flask import render_template, request
 from flask import Flask, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
@@ -288,18 +289,31 @@ def query_get_user(user_id):
         return jsonify(users = users.serialize)
 
 
-@simpleApp.route('/asylum_connect/api/v1.0/organizations')
-def query_get_organizations():
-    """
-        Returns json object of all organizations based on filters
-        specified by client
-    """
-    iso3_language = 'ENG' # Eventually property of user
-    filtered_organization, limit = filter_object(Organization, request.args)
+@simpleApp.route('/asylum_connect/api/v1.0/organizations', methods=['GET', 'POST'])
+def query_organizations():
+    if request.method == 'POST':
+        """
+            Create an organization
+        """
+        # Autogenerate the organization's id
+        id = uuid.uuid4()
+        # The following properties are required in the body:
+        ## description, emails, is_closed, last_verified, lat, location lon, name, opportunity_aggregate_ratings, opportunity_communitiy_properties,
+        ## opportunity_count, opportunity_tags phones, properties, rating, region, resource_type, schedule, tags, updated_at, website
+        description = request.args.get('description')
+        emails = request.args.get('emails')
+        return ("I'm a new organization!")
+    else:
+        """
+            Returns json object of all organizations based on filters
+            specified by client
+        """
+        iso3_language = 'ENG' # Eventually property of user
+        filtered_organization, limit = filter_object(Organization, request.args)
 
-    result = get_object_description(filtered_organization, Organization, get_organization, limit=limit)
+        result = get_object_description(filtered_organization, Organization, get_organization, limit=limit)
 
-    return jsonify(organization = result)
+        return jsonify(organization = result)
 
 @simpleApp.route('/asylum_connect/api/v1.0/organization/<id>')
 def query_get_organization(id):
@@ -405,3 +419,33 @@ def query_get_favorite(user_id):
     result_organization = get_object_description(organizations, Organization, get_organization)
 
     return jsonify(favorites = {'organizations':result_organization, 'opportunities' : result_services})
+
+@simpleApp.route('/asylum_connect/api/v1.0/organizations/<organization_id>/user/<user_id>/comment', methods=['POST'])
+def query_post_comment(organization_id, user_id):
+    """
+        Create the comment for an organization
+    """
+    # The following properties are required in the body of the comment: comment, date_updated
+    if request.method == 'POST':
+        id = uuid.uuid4()
+        comment = request.args.get('comment')
+        user_id = user_id
+        date_updated = datetime.now()
+    # Query the Organziation model to find the entity_id
+        organization = Organization.query.filter_by(id=organization_id).first()
+        entity_id = organization.entity_id
+    # Create a new Comments object using the data above
+        new_comment = Comments(id, user_id, entity_id, date_updated, comment)
+        db.session.add(new_comment)
+        db.session.commit()
+    # Return a JSON representation of the new comment
+        return jsonify(comment = {'id': id, 'comment': comment, 'date_updated': date_updated})
+
+@simpleApp.route('/asylum_connect/api/v1.0/comments')
+def query_get_comments():
+    """
+        Returns all comments for all entities
+    """
+    comments = Comments.query.all()
+
+    return jsonify(comments = [c.serialize for c in comments])
