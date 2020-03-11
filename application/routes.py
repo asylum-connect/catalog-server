@@ -351,7 +351,7 @@ def query_get_services():
 
     return jsonify(services=result)
 
-@simpleApp.route('/asylum_connect/api/v1.0/service/<id>')
+@simpleApp.route('/asylum_connect/api/v1.0/services/<id>')
 def query_get_service(id):
     """
         Returns single service. If column name is specified will return
