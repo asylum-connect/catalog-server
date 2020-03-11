@@ -143,10 +143,12 @@ def get_organization(organization, description):
         'description' : description,
         'opportunity_count' : len(service_collection),
         'opportunity_communitiy_properties' : deduplicate(all_properties),
-        'opportunity_aggregate_ratings' : round(np.mean(all_ratings),1),
         'resource_type' : 'organization',
         'opportunity_tags' : deduplicate(all_tags)
     }
+
+    if(len(all_ratings)):
+        organization_extension['opportunity_aggregate_ratings'] = round(np.mean(all_ratings),1)
 
     organization_extension.update(get_entity(organization.entity))
     return dict(organization.serialize, **organization_extension)
@@ -306,7 +308,7 @@ def query_get_organizations():
 
     result = get_object_description(filtered_organization, Organization, get_organization, limit=limit, offset=offset)
 
-    return jsonify(organization = result)
+    return jsonify(organizations = result)
 
 @simpleApp.route('/asylum_connect/api/v1.0/organization/<id>')
 def query_get_organization(id):
@@ -347,7 +349,7 @@ def query_get_services():
 
     result = get_object_description(filtered_service, Services, get_service, limit=limit)
 
-    return jsonify(opportunities=result)
+    return jsonify(services=result)
 
 @simpleApp.route('/asylum_connect/api/v1.0/service/<id>')
 def query_get_service(id):
@@ -359,7 +361,7 @@ def query_get_service(id):
     if query_result is None:
         return not_found()
     else:
-        return jsonify(opportunity= get_service(*query_result))
+        return jsonify(service= get_service(*query_result))
 
 @simpleApp.route('/asylum_connect/api/v1.0/service/<id>/<column_name>')
 def query_get_service_column(id, column_name):
