@@ -82,7 +82,6 @@ def get_entity(entity):
     """
         Returns a dictionary of entity table columns used in catalog
     """
-    address = entity.address.serialize
     weekly_schedule = get_schedule(entity.schedules)
     properties = get_propertites(entity.properties)
     tags = get_tags(entity.tags)
@@ -91,15 +90,19 @@ def get_entity(entity):
         'comments' : [c.serialize for c in entity.comments],
         'comment_count' : len(entity.comments),
         'emails' : [e.serialize for e in entity.emails],
-        'lat' : address['lat'],
-        'lon' : address['lon'],
-        'location' : address,
         'phones' : [p.serialize for p in entity.phones],
         'properties' : properties,
-        'region' :f"{address['city']}, {address['state']}",
+
         'schedule' : weekly_schedule,
         'tags' : tags
     }
+
+    if (entity.address):
+        address = entity.address.serialize
+        entity_extension['location'] = address
+        entity_extension['lat'] = address['lat']
+        entity_extension['lon'] = address['lon']
+        entity_extension['region'] = f"{address['city']}, {address['state']}"
 
     return dict(entity.serialize, **entity_extension)
 
