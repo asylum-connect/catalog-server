@@ -1,4 +1,7 @@
 # catalog-server
+
+[![Build Status](https://travis-ci.org/asylum-connect/catalog-server.svg?branch=master)](https://travis-ci.org/asylum-connect/catalog-server)
+
 A Flask API
 
 ## Dependencies
