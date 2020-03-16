@@ -194,7 +194,8 @@ def get_organization(organization, description):
 
         all_tags = all_tags + get_tags(entity.category)
         all_properties = all_properties + [*get_propertites(entity.properties)]
-        all_ratings.append(entity.rating)
+        if entity.rating is not None:
+            all_ratings.append(entity.rating)
 
     organization_extension = {
         'description' : description,
@@ -205,6 +206,7 @@ def get_organization(organization, description):
     }
 
     if(len(all_ratings)):
+        # print(f'HERE {all_ratings}')
         organization_extension['opportunity_aggregate_ratings'] = round(np.mean(all_ratings),1)
 
     organization_extension.update(get_entity(organization.entity))
@@ -562,9 +564,12 @@ def query_get_organization(id):
         single property
     """
     query_result = single_query(Organization, id)
+    # query_result = Organization.query.filter_by(id = id).one_or_none()
+    # print(f'***********************\n{query_result}')
     if query_result is None:
         return not_found()
     else:
+        # return jsonify(result = query_result.service.serialize)
         return jsonify(organization=get_organization(*query_result))
 
 @simpleApp.route('/asylum_connect/api/v1.0/organization/<id>/<column_name>')
