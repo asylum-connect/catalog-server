@@ -172,7 +172,6 @@ def get_object_description(objects, object_type, get_function, iso3_language = '
 
     result_object = []
     for object, description in object_collection:
-        print(f'=================\n{description}')
         result_object.append(get_function(object, description))
 
     return result_object
@@ -194,6 +193,7 @@ def get_organization(organization, description):
 
         all_tags = all_tags + get_tags(entity.category)
         all_properties = all_properties + [*get_propertites(entity.properties)]
+
         if entity.rating is not None:
             all_ratings.append(entity.rating)
 
@@ -206,7 +206,6 @@ def get_organization(organization, description):
     }
 
     if(len(all_ratings)):
-        # print(f'HERE {all_ratings}')
         organization_extension['opportunity_aggregate_ratings'] = round(np.mean(all_ratings),1)
 
     organization_extension.update(get_entity(organization.entity))
@@ -309,17 +308,17 @@ def filter_object(object, raw_query, range = 5):
 
     return filtered_object, limit, offset
 
-def set_schedule(schedule):
+def upload_time_block(schedule):
     """
-      PURPOSE : Given a schedule time reference.
-       PARAMS : schedule: dict -
-                E.g:    "schedule" : {
-                             "Sunday" : [],
-                             "Monday" : ["9AM-5PM"],
-                             "Tuesday" : ["9AM-12PM","3PM-6PM"]
-                       }
-      RETURNS : sched: list - list day_time ids for given schedule
-      NOTES : most time the onus is in the client to check before inserting
+     *  PURPOSE : Given a schedule upload the time blocks
+     *   PARAMS : schedule: dict -
+     *            E.g:    "schedule" : {
+     *                         "Sunday" : [],
+     *                         "Monday" : ["9AM-5PM"],
+     *                         "Tuesday" : ["9AM-12PM","3PM-6PM"]
+     *                   }
+     *  RETURNS : sched: list - list day_time ids for given schedule
+     *  NOTES : most time the onus is in the client to check before inserting
     """
     sched = []
     for day, times in schedule.items():
@@ -359,12 +358,12 @@ def client_error(error, message):
 
 def decompose_config(Table, config):
     """
-      PURPOSE : Separates config file in two, one part that match the column in
-                specified table
-       PARAMS : Table: db.Model
-                config: dict
-      RETURNS : config_other: dict - config not in the table
-                config_in_table: dict - config in the table
+     *  PURPOSE : Separates config file in two, one part that match the column in
+     *            specified table
+     *   PARAMS : Table: db.Model
+     *            config: dict
+     *  RETURNS : config_other: dict - config not in the table
+     *            config_in_table: dict - config in the table
     """
     # string returned from __table__.columns: entity.id, user.first_name
     table_column = eval(str(Table.__table__.columns))
@@ -383,23 +382,20 @@ def decompose_config(Table, config):
 
 def update_database(Table, config, commit=True, *args):
     """
-      PURPOSE : Given a table it will upload the entry
-       PARAMS : Table: db.Model
-                config: dict
-                commit: bool
-                *args - list of tuple (Table: db.Model, tablename: str, table_config: dict)
-      RETURNS :  config - dict of table configuration or None
-      NOTES: can be cleaned up especially with args to make more general
+     *  PURPOSE : Given a table it will upload the entry
+     *   PARAMS : Table: db.Model
+     *            config: dict
+     *            commit: bool
+     *            *args - list of tuple (Table: db.Model, tablename: str, table_config: dict)
+     *  RETURNS :  config - dict of table configuration or None
+     *  NOTES: can be cleaned up especially with args to make more general
     """
     basic_config = get_basic_config(Table.__tablename__)
-    print(f'got basic_config: {basic_config}')
     config = dict(basic_config, **config)
-    print(f'\nappended config: {config}')
     try:
         new_entry = Table(**config)
 
         # TODO: clean this up so that it is more general
-        print(f'\nbefore args')
         if args:
             for Object, column_name, values in args[0]:
                 objects = Object.query.filter(Object.id.in_(values))
@@ -408,16 +404,115 @@ def update_database(Table, config, commit=True, *args):
                 elif column_name == 'category':
                     [new_entry.category.append(o) for o in objects]
 
-        print(f'\nafter args')
         db.session.add(new_entry)
-        print('\nadded')
         if commit:
-            print('\nbefore commit')
             db.session.commit()
-            print('\nafter commit')
         return config
     except:
         return None
+
+def convert_str_time(time, time_format=None):
+    """
+     *  PURPOSE : Converts string time to time
+     *   PARAMS : time: str
+     *            time_format: str - datetime string format standard
+     *  RETURNS : time: datetime.time
+     *    NOTES : fails if str does not match
+    """
+    if time_format is None:
+        if ':' in time:
+            time_format = '%I:%M%p'
+        elif 'h' in time:
+            time_format = '%Ih%M%p'
+        else:
+            time_format = '%I%p'
+
+    return datetime.strptime(time,time_format).time()
+
+def conditional_update(Table, filters):
+    """
+     *  PURPOSE : Updates if not duplicate entry
+     *   PARAMS : Table: db.Model -
+     *            filters: dict - all unique values in the entry
+     *  RETURNS : id: str - can sometimes be an integer
+     *    NOTES : does not commit changes so you have to commit them after
+    """
+    result = Table.query.filter_by(**filters).one_or_none()
+
+    if result is None:
+        config = update_database(Table, filters, commit=False)
+        return config['id']
+    else:
+        return result.id
+
+
+def set_schedule(schedule_config, entity_id, commit = False):
+    """
+     * PURPOSE : Upload schedule to database
+     *  PARAMS : schedule_config: dict
+     *           entity_id: str - has to already be in table
+     *           commit: bool
+     * RETURNS : schedule_config: dict
+     *   NOTES : Does not change the value of the configuration
+    """
+
+    schedule_id = upload_time_block(schedule_config)
+
+    for id in schedule_id:
+        config = {'day_time_id' : id,
+                   'entity_id' : entity_id
+                 }
+
+        update_database(Service, config, commit=commit)
+
+    return schedule_config
+
+def set_config_object(tablename, object_config, all_config):
+    """
+     * PURPOSE : Adds to the configuration based on specific table
+     *           needs
+     *  PARAMS : tablename: str
+     *           object_config: dict
+     *           all_config: dict
+     * RETURNS : object_config: dict - updated configuration
+     *   NOTES : order matters. Address must be created first and then entity &
+     *           service needs to be created before access
+    """
+    # TODO: add configuration for organization
+    # most other tables need a entity_relation & address
+    if tablename == 'entity':
+        object_config['address_id'] = all_config['address']['id']
+
+    if tablename != 'entity' and tablename != 'address':
+        object_config['entity_id'] = all_config['entity']['id']
+
+    if tablename == 'access':
+        object_config['service_id'] = all_config['service']['id']
+
+    return object_config
+
+def upload_object(table, table_config, other_config):
+    """
+     * PURPOSE : Upload object with configuration to database
+     *  PARAMS : table: db.Model
+     *           table_config: dict
+     *           other_config: dict
+     * RETURNS : config: dict
+    """
+    tablename = table.__tablename__
+
+    if tablename == 'entity':
+        config = update_database(table, table_config, False,
+                                [(Property, 'properties', other_config['property_id']),
+                                 (Category, 'category', other_config['category_id'])])
+
+    elif tablename == 'schedule':
+        config = set_schedule(other_config['schedule'],
+                              table_config['entity_id'])
+    else:
+        config = update_database(table, table_config, commit = False)
+
+    return {tablename : config}
 
 @simpleApp.errorhandler(404)
 def not_found():
@@ -439,16 +534,14 @@ def query_managers():
         user_config = request.json
         is_admin = user_config.pop('is_admin', False)
 
-        # Add to user table
         user_config = update_database(Users, user_config, commit=False)
-        if user_config is None:
-            return bad_request()
-
         manager_config = update_database(DataManager, {"user_id" : user_config['id'],
                                                        "is_admin" : is_admin})
+        if manager_config is None:
+            return bad_request()
 
         return jsonify({'user' : user_config,
-                        'data_manager_id': id,
+                        'data_manager': manager_config,
                         'is_admin' : is_admin})
     else:
         users = DataManager.query.outerjoin(Users).all()
@@ -552,27 +645,23 @@ def query_get_organizations():
     """
     iso3_language = 'ENG' # Eventually property of user
     filtered_organization, limit, offset = filter_object(Organization, request.args)
-    print(f'\n\nIN ORG: {filtered_organization}')
     result = get_object_description(filtered_organization, Organization, get_organization, limit=limit, offset=offset)
 
     return jsonify(organizations = result)
 
-@simpleApp.route('/asylum_connect/api/v1.0/organization/<id>')
+@simpleApp.route('/asylum_connect/api/v1.0/organizations/<id>')
 def query_get_organization(id):
     """
         Returns single organization. If column name is specified will return
         single property
     """
     query_result = single_query(Organization, id)
-    # query_result = Organization.query.filter_by(id = id).one_or_none()
-    # print(f'***********************\n{query_result}')
     if query_result is None:
         return not_found()
     else:
-        # return jsonify(result = query_result.service.serialize)
         return jsonify(organization=get_organization(*query_result))
 
-@simpleApp.route('/asylum_connect/api/v1.0/organization/<id>/<column_name>')
+@simpleApp.route('/asylum_connect/api/v1.0/organizations/<id>/<column_name>')
 def query_get_organization_column(id, column_name):
     """
         Returns single service. If column name is specified will return
@@ -590,100 +679,42 @@ def query_get_organization_column(id, column_name):
     else:
         return not_found()
 
-def convert_str_time(time, time_format=None):
-    """
-      PURPOSE : Converts string time to time
-       PARAMS : time: str
-                time_format: str - datetime string format standard
-      RETURNS : time: datetime.time
-        NOTES : fails if str does not match
-    """
-    if time_format is None:
-        if ':' in time:
-            time_format = '%I:%M%p'
-        elif 'h' in time:
-            time_format = '%Ih%M%p'
-        else:
-            time_format = '%I%p'
-
-    return datetime.strptime(time,time_format).time()
-
-def conditional_update(Table, filters):
-    """
-      PURPOSE : Updates if not duplicate entry
-       PARAMS : Table: db.Model -
-                filters: dict - all unique values in the entry
-      RETURNS : id: str - can sometimes be an integer
-        NOTES : does not commit changes so you have to commit them after
-    """
-    result = Table.query.filter_by(**filters).one_or_none()
-
-    if result is None:
-        config = update_database(Table, filters, commit=False)
-        return config['id']
-    else:
-        return result.id
-
-
-
 @simpleApp.route('/asylum_connect/api/v1.0/services', methods = ['GET', 'POST'])
 def query_get_services():
-    """
-        Returns json objects of all services based on filters specified by client
-    """
-    print('IN services route')
     if request.method == 'POST':
+        """
+            Adds a service entry to database
+        """
         service_config = request.json
+
+        # order matters b/c of foreign key relationship
         tables = [Address, Entity, Email, Phone,
                 EntityLanguage, Service,  Access, Schedule]
         all_config = {}
 
-        # Set variables in table
         for table in tables:
             tablename = table.__tablename__
 
-            # each variable is dropped from service_config once assigned to another
-            # variable
-            if tablename != 'entity' and tablename != 'address':
-                service_config['entity_id'] = all_config['entity']['id']
-
-            if tablename == 'access':
-                service_config['service_id'] = all_config['service']['id']
-
+            service_config = set_config_object(tablename, service_config, all_config)
             table_config, service_config = decompose_config(table, service_config)
+            update_config = upload_object(table, table_config, service_config)
 
-            if tablename == 'entity':
-                table_config['address_id'] = all_config['address']['id']
-                all_config[tablename] = update_database(table, table_config, False,
-                                                        [(Property, 'properties', service_config['property_id']),
-                                                         (Category, 'category', service_config['category_id'])])
-            elif tablename == 'schedule':
-                # the variable schedule is not in a the table
-                schedule_id = set_schedule(service_config['schedule'])
-
-                for id in schedule_id:
-                    update_database(table, {'day_time_id' : id, 'entity_id' : table_config['entity_id']}, commit = False)
-
-                all_config['schedule'] = service_config['schedule']
-            else:
-                all_config[tablename] = update_database(table, table_config, commit = False)
+            all_config = dict(all_config, **update_config)
 
         try:
-            # commit at the end so that you don't add it if there's going to be an error
             db.session.commit()
             return jsonify(all_config)
         except:
             return bad_request()
 
     else:
-        print('=================\nnot passed filter', file=sys.stderr)
+        """
+            Returns json objects of all services based on filters specified by client
+        """
         filtered_service, limit, offset = filter_object(Service, request.args)
-        print('post filter object', file=sys.stderr)
-        print(f'\n\nIN SER: {filtered_service}')
         result = get_object_description(filtered_service, Service, get_service, limit=limit)
 
         return jsonify(services=result)
-
 
 @simpleApp.route('/asylum_connect/api/v1.0/services/<id>', methods = ['PUT', 'DELETE', 'GET'])
 def query_get_service(id):
@@ -739,7 +770,7 @@ def query_get_service(id):
     else:
         return jsonify(service= get_service(*query_result))
 
-@simpleApp.route('/asylum_connect/api/v1.0/service/<id>/<column_name>')
+@simpleApp.route('/asylum_connect/api/v1.0/services/<id>/<column_name>')
 def query_get_service_column(id, column_name):
     """
         Returns single service. If column name is specified will return
@@ -756,7 +787,6 @@ def query_get_service_column(id, column_name):
         return jsonify({column_name : service[column_name]})
     else:
         return not_found()
-
 
 @simpleApp.route('/asylum_connect/api/v1.0/locations')
 def query_get_locations():
