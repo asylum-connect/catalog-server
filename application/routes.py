@@ -1,5 +1,8 @@
 import random, uuid
 import numpy as np
+import sys
+
+from datetime import datetime
 from application import simpleApp, db
 from flask import render_template, request
 from flask import Flask, jsonify, session
@@ -7,7 +10,28 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_, text
 
 from .models import *
-from .core import db
+
+WEEKDAYS = {
+    'Sunday' : 1,
+    'Monday': 2,
+    'Tuesday' : 3,
+    'Wednesday' : 4,
+    'Thursday' : 5,
+    'Friday' : 6,
+    'Saturday' :7
+}
+
+TABLENAME = {
+    'entity' : Entity,
+    'address' : Address,
+    'access' : Access,
+    'email' : Email,
+    'phone' : Phone,
+    'entity_language' : EntityLanguage,
+    'service' : Service,
+    'schedule' : Schedule,
+    'organization' : Organization
+}
 
 def tags_mapping(name):
     """
@@ -62,12 +86,44 @@ def within_location_query(object_name,lat,lon, range):
         TODO: verify what the proximity range should be? We can make it variable
     """
     query_template = f"SELECT {object_name}.id AS {object_name}_id\
-                      FROM {object_name}, tags, address\
+                      FROM {object_name}, category, address\
                       WHERE ST_DWithin(ST_SetSRID(\
                       ST_Point(address.lat, address.lon), 4326),\
                       'SRID=4326;POINT({lat} {lon})', {range})"
 
     return text(query_template)
+
+def get_basic_config(tablename):
+    """
+      PURPOSE : Maps basic configuration with table type
+       PARAMS :  tablename: str
+      RETURNS :  basic_config : dict
+    """
+
+    id = uuid.uuid4().hex
+    date_created = datetime.now()
+
+    basic_config = {
+        "entity" : {
+            'id' : id,
+            'date_created' : date_created,
+            'is_verified' : False
+        },
+
+        "users" : {
+            'id' : id,
+            'date_created' : date_created,
+            'active' : True
+        },
+
+        "access" : {
+            'id' : id,
+            'date_created' : date_created
+        },
+    }
+
+    # if there aren't additional it adds just an id
+    return basic_config.get(tablename, {'id' : id})
 
 def get_description(filtered_object, object_type, iso3_language = 'ENG'):
     """
@@ -84,11 +140,11 @@ def get_entity(entity):
     """
     weekly_schedule = get_schedule(entity.schedules)
     properties = get_propertites(entity.properties)
-    tags = get_tags(entity.tags)
+    tags = get_tags(entity.category)
 
     entity_extension =  {
-        'comments' : [c.serialize for c in entity.comments],
-        'comment_count' : len(entity.comments),
+        'comments' : [c.serialize for c in entity.comment],
+        'comment_count' : len(entity.comment),
         'emails' : [e.serialize for e in entity.emails],
         'phones' : [p.serialize for p in entity.phones],
         'properties' : properties,
@@ -116,6 +172,7 @@ def get_object_description(objects, object_type, get_function, iso3_language = '
 
     result_object = []
     for object, description in object_collection:
+        print(f'=================\n{description}')
         result_object.append(get_function(object, description))
 
     return result_object
@@ -131,11 +188,11 @@ def get_organization(organization, description):
     all_tags = []
     all_properties = []
 
-    service_collection = organization.services
+    service_collection = organization.service
     for service in service_collection:
         entity = service.entity
 
-        all_tags = all_tags + get_tags(entity.tags)
+        all_tags = all_tags + get_tags(entity.category)
         all_properties = all_properties + [*get_propertites(entity.properties)]
         all_ratings.append(entity.rating)
 
@@ -181,6 +238,7 @@ def get_schedule(schedules):
     """
         Returns dictionary of time in 1D format
 
+
         TODO: once fully integrated we want to allow for time blocks instead of
               just start and end
     """
@@ -202,7 +260,7 @@ def get_tags(tag_collection):
     """
     tags = []
     for tag in tag_collection:
-        tags.append(Tags.query.filter_by(id = tag.parent_tag).one().name)
+        tags.append(Category.query.filter_by(id = tag.parent_id).one().name)
 
     return tags
 
@@ -224,7 +282,7 @@ def filter_query(object, query, range = 5):
         query_object = query_object.filter(object.id.in_(object_id))
 
     if query['tags']:
-        query_object = query_object.filter(Tags.id.in_(query['tags']))
+        query_object = query_object.filter(Category.id.in_(query['tags']))
 
     if query['property']:
         query_object = query_object.filter(Property.name.in_(query['property']))
@@ -249,53 +307,240 @@ def filter_object(object, raw_query, range = 5):
 
     return filtered_object, limit, offset
 
+def set_schedule(schedule):
+    """
+      PURPOSE : Given a schedule time reference.
+       PARAMS : schedule: dict -
+                E.g:    "schedule" : {
+                             "Sunday" : [],
+                             "Monday" : ["9AM-5PM"],
+                             "Tuesday" : ["9AM-12PM","3PM-6PM"]
+                       }
+      RETURNS : sched: list - list day_time ids for given schedule
+      NOTES : most time the onus is in the client to check before inserting
+    """
+    sched = []
+    for day, times in schedule.items():
+        for time in times:
+            start_time, end_time = time.split('-')
+            filter_time = {
+                'start_time' : convert_str_time(start_time),
+                'end_time' : convert_str_time(end_time)
+            }
+
+            time_id = conditional_update(TimeBlock, filter_time)
+
+            filter_daytime = {
+                'time_id' : time_id,
+                'day_id' : WEEKDAYS[day]
+            }
+
+            daytime_id = conditional_update(DayTime, filter_daytime)
+            sched.append(daytime_id)
+
+    db.session.commit()
+    return sched
+
 def single_query(object, id, iso3_language = 'ENG',column_name = None):
     result_object = object.query.filter_by(id = id)
-    import sys
     return get_description(result_object, object, iso3_language).one_or_none()
 
-@simpleApp.errorhandler(404)
-def not_found(error = None):
-    """
-        Creates a json 404 response
-    """
+def client_error(error, message):
     message = {
-        'status' : 404,
-        'message' : f'Not Found: {request.url}'
+        'status' : error,
+        'message' : message
     }
-
     response = jsonify(message)
-    response.status_code = 404
+    response.status_code = error
 
     return response
 
-@simpleApp.route('/asylum_connect/api/v1.0/users', methods = ['GET'])
-def userFunction():
+def decompose_config(Table, config):
     """
-        Returns json object of all users
+      PURPOSE : Separates config file in two, one part that match the column in
+                specified table
+       PARAMS : Table: db.Model
+                config: dict
+      RETURNS : config_other: dict - config not in the table
+                config_in_table: dict - config in the table
     """
-    users = AsylumSeeker.query.outerjoin(Users).all()
+    # string returned from __table__.columns: entity.id, user.first_name
+    table_column = eval(str(Table.__table__.columns))
+    table_column = [col.split('.',1)[1] for col in table_column]
 
-    result = []
-    for u in users:
-        dict1 = u.serialize
-        dict1.update(u.user.serialize)
-        result.append(dict1)
+    config_in_table = {}
+    config_other = {}
 
-    return jsonify(users = result)
+    for key, value in config.items():
+        if key in table_column:
+            config_in_table[key] = value
+        else:
+            config_other[key] = value
 
-@simpleApp.route('/asylum_connect/api/v1.0/user=<user_id>')
-def query_get_user(user_id):
+    return config_in_table, config_other
+
+def update_database(Table, config, commit=True, *args):
+    """
+      PURPOSE : Given a table it will upload the entry
+       PARAMS : Table: db.Model
+                config: dict
+                commit: bool
+                *args - list of tuple (Table: db.Model, tablename: str, table_config: dict)
+      RETURNS :  config - dict of table configuration or None
+      NOTES: can be cleaned up especially with args to make more general
+    """
+    basic_config = get_basic_config(Table.__tablename__)
+    print(f'got basic_config: {basic_config}')
+    config = dict(basic_config, **config)
+    print(f'\nappended config: {config}')
+    try:
+        new_entry = Table(**config)
+
+        # TODO: clean this up so that it is more general
+        print(f'\nbefore args')
+        if args:
+            for Object, column_name, values in args[0]:
+                objects = Object.query.filter(Object.id.in_(values))
+                if column_name == 'properties':
+                    [new_entry.properties.append(o) for o in objects]
+                elif column_name == 'category':
+                    [new_entry.category.append(o) for o in objects]
+
+        print(f'\nafter args')
+        db.session.add(new_entry)
+        print('\nadded')
+        if commit:
+            print('\nbefore commit')
+            db.session.commit()
+            print('\nafter commit')
+        return config
+    except:
+        return None
+
+@simpleApp.errorhandler(404)
+def not_found():
+    """
+        Creates a json not found response
+    """
+    return client_error(404, f'Not Found:  {request.url}')
+
+@simpleApp.errorhandler(400)
+def bad_request():
+    """
+        Creates a json bad request
+    """
+    return client_error(400, f'Bad request')
+
+@simpleApp.route('/asylum_connect/api/v1.0/managers', methods = ['GET','POST'])
+def query_managers():
+    if request.method == 'POST':
+        user_config = request.json
+        is_admin = user_config.pop('is_admin', False)
+
+        # Add to user table
+        user_config = update_database(Users, user_config, commit=False)
+        if user_config is None:
+            return bad_request()
+
+        manager_config = update_database(DataManager, {"user_id" : user_config['id'],
+                                                       "is_admin" : is_admin})
+
+        return jsonify({'user' : user_config,
+                        'data_manager_id': id,
+                        'is_admin' : is_admin})
+    else:
+        users = DataManager.query.outerjoin(Users).all()
+
+        result = []
+        for u in users:
+            manager = u.serialize
+            manager.update(u.users.serialize)
+            result.append(manager)
+
+        return jsonify(data_manager = result)
+
+    pass
+
+@simpleApp.route('/asylum_connect/api/v1.0/users', methods = ['GET','POST'])
+def query_users():
+    if request.method == 'POST':
+        """
+            Returns json object of added user
+        """
+        user_config = update_database(Users, request.json)
+
+        if user_config is None:
+            return bad_request()
+        else:
+            return jsonify(new_user = user_config)
+
+    else:
+        """
+            Returns json object of all users
+        """
+        users = Users.query.all()
+        result = [u.serialize for u in users]
+
+        return jsonify(users = result)
+
+@simpleApp.route('/asylum_connect/api/v1.0/managers/<user_id>',methods = ['GET','PUT','DELETE'])
+def query_manager(user_id):
+    manager = DataManager.query.filter_by(id = user_id).outerjoin(Users).one_or_none()
+
+    if manager is None:
+        return not_found()
+
+    if request.method == 'PUT':
+        before_update = dict(manager.serialize,**manager.users.serialize)
+        data = request.json
+
+        for key, value in data.items():
+            # you should not be allowed to change user id or id
+            if key != 'id' or key != 'user_id':
+                setattr(manager, key, value)
+                setattr(manager.users, key, value)
+
+        db.session.commit()
+        return jsonify({'before_update' : before_update,
+                        'now' : dict(manager.serialize,**manager.users.serialize)})
+
+    if request.method == 'DELETE':
+        db.session.delete(manager)
+        db.session.commit()
+
+        return f"data manager {user_id} deleted"
+    else:
+        return jsonify(data_manager = dict(manager.serialize,**manager.users.serialize))
+
+@simpleApp.route('/asylum_connect/api/v1.0/users/<user_id>',methods = ['GET','PUT','DELETE'])
+def query_user(user_id):
     """
         Returns json object of one user given user_id
     """
-    users = AsylumSeeker.query.filter_by(user_id = user_id).one_or_none()
-
-    if users is None:
+    user = Users.query.filter_by(id = user_id).one_or_none()
+    if user is None:
         return not_found()
-    else:
-        return jsonify(users = users.serialize)
 
+    if request.method == 'PUT':
+        before_update = user.serialize
+        data = request.json
+
+        for key, value in data.items():
+            if key != 'id':         # you should not be allowed to change user id
+                setattr(user,key, value)
+
+        db.session.commit()
+
+        return jsonify({'before_update' : before_update,
+                        'now' : user.serialize})
+
+    elif request.method == 'DELETE':
+        db.session.delete(user)
+        db.session.commit()
+
+        return f"user {user_id} deleted"
+    else:
+        return jsonify(users = user.serialize)
 
 @simpleApp.route('/asylum_connect/api/v1.0/organizations')
 def query_get_organizations():
@@ -305,7 +550,7 @@ def query_get_organizations():
     """
     iso3_language = 'ENG' # Eventually property of user
     filtered_organization, limit, offset = filter_object(Organization, request.args)
-
+    print(f'\n\nIN ORG: {filtered_organization}')
     result = get_object_description(filtered_organization, Organization, get_organization, limit=limit, offset=offset)
 
     return jsonify(organizations = result)
@@ -340,26 +585,152 @@ def query_get_organization_column(id, column_name):
     else:
         return not_found()
 
-@simpleApp.route('/asylum_connect/api/v1.0/services')
+def convert_str_time(time, time_format=None):
+    """
+      PURPOSE : Converts string time to time
+       PARAMS : time: str
+                time_format: str - datetime string format standard
+      RETURNS : time: datetime.time
+        NOTES : fails if str does not match
+    """
+    if time_format is None:
+        if ':' in time:
+            time_format = '%I:%M%p'
+        elif 'h' in time:
+            time_format = '%Ih%M%p'
+        else:
+            time_format = '%I%p'
+
+    return datetime.strptime(time,time_format).time()
+
+def conditional_update(Table, filters):
+    """
+      PURPOSE : Updates if not duplicate entry
+       PARAMS : Table: db.Model -
+                filters: dict - all unique values in the entry
+      RETURNS : id: str - can sometimes be an integer
+        NOTES : does not commit changes so you have to commit them after
+    """
+    result = Table.query.filter_by(**filters).one_or_none()
+
+    if result is None:
+        config = update_database(Table, filters, commit=False)
+        return config['id']
+    else:
+        return result.id
+
+
+
+@simpleApp.route('/asylum_connect/api/v1.0/services', methods = ['GET', 'POST'])
 def query_get_services():
     """
         Returns json objects of all services based on filters specified by client
     """
-    filtered_service, limit, offset = filter_object(Services, request.args)
+    print('IN services route')
+    if request.method == 'POST':
+        service_config = request.json
+        tables = [Address, Entity, Email, Phone,
+                EntityLanguage, Service,  Access, Schedule]
+        all_config = {}
 
-    result = get_object_description(filtered_service, Services, get_service, limit=limit)
+        # Set variables in table
+        for table in tables:
+            tablename = table.__tablename__
 
-    return jsonify(services=result)
+            # each variable is dropped from service_config once assigned to another
+            # variable
+            if tablename != 'entity' and tablename != 'address':
+                service_config['entity_id'] = all_config['entity']['id']
 
-@simpleApp.route('/asylum_connect/api/v1.0/services/<id>')
+            if tablename == 'access':
+                service_config['service_id'] = all_config['service']['id']
+
+            table_config, service_config = decompose_config(table, service_config)
+
+            if tablename == 'entity':
+                table_config['address_id'] = all_config['address']['id']
+                all_config[tablename] = update_database(table, table_config, False,
+                                                        [(Property, 'properties', service_config['property_id']),
+                                                         (Category, 'category', service_config['category_id'])])
+            elif tablename == 'schedule':
+                # the variable schedule is not in a the table
+                schedule_id = set_schedule(service_config['schedule'])
+
+                for id in schedule_id:
+                    update_database(table, {'day_time_id' : id, 'entity_id' : table_config['entity_id']}, commit = False)
+
+                all_config['schedule'] = service_config['schedule']
+            else:
+                all_config[tablename] = update_database(table, table_config, commit = False)
+
+        try:
+            # commit at the end so that you don't add it if there's going to be an error
+            db.session.commit()
+            return jsonify(all_config)
+        except:
+            return bad_request()
+
+    else:
+        print('=================\nnot passed filter', file=sys.stderr)
+        filtered_service, limit, offset = filter_object(Service, request.args)
+        print('post filter object', file=sys.stderr)
+        print(f'\n\nIN SER: {filtered_service}')
+        result = get_object_description(filtered_service, Service, get_service, limit=limit)
+
+        return jsonify(services=result)
+
+
+@simpleApp.route('/asylum_connect/api/v1.0/services/<id>', methods = ['PUT', 'DELETE', 'GET'])
 def query_get_service(id):
     """
         Returns single service. If column name is specified will return
         single property
     """
-    query_result = single_query(Services, id)
+    # service, description
+    query_result = single_query(Service, id)
+
     if query_result is None:
         return not_found()
+
+    service = query_result[0]
+    before_update = service.serialize
+    date_now = datetime.now()
+
+    if request.method == 'PUT':
+        data = request.json
+
+        for tablename, config in data.items():
+            for key, value in config.items():
+                if key != 'id' or key != entity_id:
+                    if tablename == 'service':
+                        table = service
+                    elif tablename == 'access':
+                        table = service.access
+                    elif tablename == 'entity':
+                        table = service.entity
+                    elif tablname == 'entity_language':
+                        table = service.entity.entity_language
+                    elif tablename == 'address':
+                        table = service.entity.address
+
+                    setattr(table, key, value)
+                    setattr(table, 'date_updated', date_now)
+            # you should not be allowed to change user id or id
+            # if key != 'id' or key != 'user_id':
+            #     setattr(manager,key, value)
+            #     setattr(manager.users, key, value)
+
+        db.session.commit()
+        return jsonify({'before_update' : before_update,
+                        'now' : service.serialize})
+        pass
+    elif request.method == 'DELETE':
+        entity = Entity.query.filter_by(id=service.entity_id).one_or_none()
+
+        db.session.delete(service)
+        db.session.commit()
+
+        return f"service {id} deleted"
     else:
         return jsonify(service= get_service(*query_result))
 
@@ -369,7 +740,7 @@ def query_get_service_column(id, column_name):
         Returns single service. If column name is specified will return
         single property
     """
-    query_result = single_query(Services, id)
+    query_result = single_query(Service, id)
 
     if query_result is None:
         return not_found()
@@ -396,7 +767,7 @@ def query_get_tags():
     for key, val in temp.items():
         print(f'{key} : {val}')
 
-    return jsonify(tags = [t.serialize for t in Tags.query.all()])
+    return jsonify(tags = [t.serialize for t in Category.query.all()])
 
 @simpleApp.route('/asylum_connect/api/v1.0/<user_id>/favorites')
 def query_get_favorite(user_id):
@@ -407,10 +778,10 @@ def query_get_favorite(user_id):
     favorites = UserFavorites.query.filter_by(user_id = user_id).all()
     entity_ids = [f.entity_id for f in favorites]
 
-    services = Services.query.filter(Services.entity_id.in_(entity_ids))
+    services = Service.query.filter(Service.entity_id.in_(entity_ids))
     organizations = Organization.query.filter(Organization.entity_id.in_(entity_ids))
 
-    result_services = get_object_description(services, Services, get_service)
+    result_services = get_object_description(services, Service, get_service)
     result_organization = get_object_description(organizations, Organization, get_organization)
 
     return jsonify(favorites = {'organizations':result_organization, 'opportunities' : result_services})

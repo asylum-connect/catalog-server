@@ -8,20 +8,20 @@ entity_property = db.Table('entity_property', db.Model.metadata,
     db.Column('property_id', db.Integer, db.ForeignKey('property.id'))
 )
 
-entity_tag = db.Table('entity_tag', db.Model.metadata,
+entity_category = db.Table('entity_category', db.Model.metadata,
     db.Column('entity_id', db.CHAR(32), db.ForeignKey('entity.id')),
-    db.Column('tag_id', db.Integer, db.ForeignKey('tags.id')))
+    db.Column('category_id', db.Integer, db.ForeignKey('category.id')))
 # create our database models
 class Access(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     access_type = db.Column(db.String)
     access_value = db.Column(db.String)
-    location = db.Column(db.String)
     direct_access = db.Column(db.Boolean)
-    service_id = db.Column(db.String, db.ForeignKey('services.id'))
     date_created = db.Column(db.DateTime)
     date_updated = db.Column(db.DateTime)
-    meta_data = db.Column(db.Text)
+    access_description = db.Column(db.Text)
+    service_id = db.Column(db.String, db.ForeignKey('service.id'))
+
 
     @property
     def serialize(self):
@@ -29,7 +29,7 @@ class Access(db.Model):
             'id' : self.id,
             'access_type' : self.access_type,
             'access_value' : self.access_value,
-            'instructions' : self.meta_data,
+            'instructions' : self.access_description,
             'enabled_direct_acess' : self.direct_access,
         }
 
@@ -67,6 +67,10 @@ class Address(db.Model):
             'lon' : self.lon
         }
 
+    def __init__(self, id, *args, **kwargs):
+        super(Address, self).__init__(*args, **kwargs)
+        self.id = id
+
 class AsylumSeeker(db.Model):
     id = db.Column(db.Integer, primary_key = True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
@@ -95,7 +99,7 @@ class Attachement(db.Model):
 
     entities = db.relationship('Entity', backref='attachement', lazy=True)
 
-class Comments(db.Model):
+class Comment(db.Model):
     id = db.Column(db.CHAR(32), primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
@@ -114,24 +118,23 @@ class Comments(db.Model):
         }
 
 class DataManager(db.Model):
-    id = db.Column(db.Integer, primary_key = True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    first_name = db.Column(db.String)
-    last_name = db.Column(db.String)
+    id = db.Column(db.String, primary_key = True)
+    user_id = db.Column(db.String, db.ForeignKey('users.id'))
     is_admin = db.Column(db.Boolean)
 
-    def __init__(self, user_id, first_name, last_name):
+    def __init__(self, id, user_id, is_admin,*args,**kwargs):
+        super(DataManager, self).__init__(*args, **kwargs)
+
+        self.id = id
         self.user_id = user_id
-        self.first_name = first_name
-        self.last_name = last_name
+        self.is_admin = is_admin
 
     @property
     def serialize(self):
         return {
             'user_id' : self.user_id,
-            'first_name' : self.first_name,
-            'last_name' : self.last_name,
-            'is_admin' : self.is_admin
+            'is_admin' : self.is_admin,
+            'id' : self.id
         }
 
 
@@ -146,13 +149,19 @@ class DayTime(db.Model):
     time_id = db.Column(db.CHAR(32), db.ForeignKey('time_block.id'))
     day_id = db.Column(db.Integer, db.ForeignKey('day.id'))
 
+    def __init__(self, id, time_id, day_id):
+        self.id = id
+        self.time_id = time_id
+        self.day_id = day_id
+
 class Email(db.Model):
     id = db.Column(db.CHAR(32), primary_key=True)
     email = db.Column(db.String(255))
     entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
     is_primary = db.Column(db.Boolean)
 
-    def __init__(self, email):
+    def __init__(self, email,*args, **kwargs):
+        super(Email, self).__init__(*args, **kwargs)
         self.email = email
 
     @property
@@ -184,16 +193,21 @@ class Entity(db.Model):
 
     address_id = db.Column(db.CHAR(32), db.ForeignKey('address.id'))
 
-    attachements = db.relationship('Attachement', backref='entity', lazy=True)
-    comments = db.relationship('Comments', backref='entity', lazy=True)
-    emails = db.relationship('Email', backref='entity', lazy=True)
-    entity_languages = db.relationship('EntityLanguage', backref='entity', lazy=True)
-    phones = db.relationship('Phone', backref='entity', lazy=True)
-    service_providers = db.relationship('ServiceProvider', backref='entity', lazy=True)
-    user_favorites = db.relationship('UserFavorites', backref='entity', lazy=True)
-    address = db.relationship('Address', backref='entity', uselist=False)
-    properties = db.relationship('Property', backref='entity', secondary=entity_property)
-    tags = db.relationship('Tags', backref='entity', secondary=entity_tag, lazy=False)
+    attachements = db.relationship('Attachement',cascade="all,delete", backref='entity', lazy=True)
+    comment = db.relationship('Comment',cascade="all,delete", backref='entity', lazy=True)
+    emails = db.relationship('Email',cascade="all,delete", backref='entity', lazy=True)
+    entity_languages = db.relationship('EntityLanguage', cascade="all,delete",backref='entity', lazy=True)
+    phones = db.relationship('Phone', cascade="all,delete", backref='entity', lazy=True)
+    service_providers = db.relationship('ServiceProvider', cascade="all,delete", backref='entity', lazy=True)
+    user_favorites = db.relationship('UserFavorite', cascade="all,delete", backref='entity', lazy=True)
+    address = db.relationship('Address', cascade="all,delete", backref='entity', uselist=False)
+    properties = db.relationship('Property', cascade="all,delete", backref='entity', secondary=entity_property)
+    category = db.relationship('Category', cascade="all,delete", backref='entity', secondary=entity_category, lazy=False)
+
+    def __init__(self, id, name, *args, **kwargs):
+        super(Entity, self).__init__(*args, **kwargs)
+        self.id = id
+        self.name = name
 
     @property
     def serialize(self):
@@ -218,8 +232,8 @@ class Organization(db.Model):
     id = db.Column(db.CHAR(32), primary_key=True)
     entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
 
-    entity = db.relationship('Entity', backref="organization", uselist=False)
-    services = db.relationship('Services', backref='organization', lazy=True)
+    entity = db.relationship('Entity', cascade="all,delete", backref="organization", uselist=False)
+    service = db.relationship('Service',cascade="all,delete", backref='organization', lazy=True)
 
     @property
     def serialize(self):
@@ -231,7 +245,6 @@ class Property(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
     definition = db.Column(db.Text)
-    value = db.Column(db.String)
 
     @property
     def serialize(self):
@@ -270,34 +283,36 @@ class ServiceProvider(db.Model):
     verified = db.Column(db.Boolean)
     entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
 
-class Services(db.Model):
+class Service(db.Model):
     id = db.Column(db.CHAR(32), primary_key=True)
     entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
-    parent_organization_id = db.Column(db.CHAR(32), db.ForeignKey('organization.id'))
+    # access_id = db.Column(db.CHAR(32), db.ForeignKey('access.id'))
+    parent_organization = db.Column(db.CHAR(32), db.ForeignKey('organization.id'))
     appointment = db.Column(db.Boolean)
 
-    entity = db.relationship('Entity', backref="services", uselist=False)
-    access = db.relationship('Access', backref="access", lazy=False)
+
+    entity = db.relationship('Entity', cascade="all,delete", backref="service", uselist=False)
+    access = db.relationship('Access', cascade="all,delete", backref="access", lazy=False)
 
     @property
     def serialize(self):
         return {
             'id' : self.id,
-            'parent_organization_id' : self.parent_organization_id,
+            'parent_organization' : self.parent_organization,
             'is_appointment' : self.appointment
         }
 
-class Tags(db.Model):
+class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
-    parent_tag = db.Column(db.Integer, db.ForeignKey('tags.id'))
+    parent_id = db.Column(db.Integer, db.ForeignKey('category.id'))
 
     @property
     def serialize(self):
         return {
             'id' : self.id,
             'tag' : self.name,
-            'parent_id' : self.parent_tag
+            'parent_id' : self.parent_id
         }
 
 class TimeBlock(db.Model):
@@ -307,37 +322,44 @@ class TimeBlock(db.Model):
 
     daytimes = db.relationship('DayTime', backref='timeblock', lazy=True)
 
+    def __init__(self, id, *args, **kwargs):
+        super(TimeBlock, self).__init__(*args, **kwargs)
+        self.id = id
+
 class Users(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.String, primary_key=True)
     email = db.Column(db.String)
-    user_type = db.Column(db.String)
-    hashed_password = db.Column(db.String)
-    salt = db.Column(db.String)
-    created_at = db.Column(db.DateTime)
-    iso3_code = db.Column(db.CHAR(3))
+    first_name = db.Column(db.String)
+    last_name = db.Column(db.String)
+    password = db.Column(db.String)
+    date_created = db.Column(db.DateTime)
     active = db.Column(db.Boolean)
     preferred_language = db.Column(db.CHAR(3))
 
-    comments = db.relationship('Comments', backref='user', lazy=True)
-    user_favorites = db.relationship('UserFavorites', backref='user', lazy=True)
-    asylum_seekers = db.relationship('AsylumSeeker', backref='user', lazy=True)
-    service_providers = db.relationship('ServiceProvider', backref='user', lazy=True)
+    comment = db.relationship('Comment', cascade="all,delete", backref='users', lazy=True)
+    user_favorite = db.relationship('UserFavorite',cascade="all,delete", backref='users', lazy=True)
+    asylum_seekers = db.relationship('AsylumSeeker', cascade="all,delete",backref='users', lazy=True)
+    data_manager = db.relationship('DataManager',cascade="all,delete", backref='users', lazy=True)
+    service_providers = db.relationship('ServiceProvider',cascade="all,delete", backref='users', lazy=True)
 
-    def __init__(self, id, email, preferred_language):
+    def __init__(self, id, email, password, *args, **kwargs):
+        super(Users, self).__init__(*args, **kwargs)
         self.id = id
         self.email = email
-        self.preferred_language = preferred_language
+        self.password = password
+
 
     @property
     def serialize(self):
         return {
             'user_id' : self.id,
             'email' : self.email,
+            'first_name' : self.first_name,
+            'last_name' : self.last_name,
             'preferred_language' : self.preferred_language
         }
 
-
-class UserFavorites(db.Model):
+class UserFavorite(db.Model):
     id = db.Column(db.CHAR(32), primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
