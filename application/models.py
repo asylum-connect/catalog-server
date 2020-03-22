@@ -4,12 +4,12 @@ from sqlalchemy import func
 # For many-many relationships table are best suited
 # https://docs.sqlalchemy.org/en/13/orm/basic_relationships.html#relationships-one-to-one
 entity_property = db.Table('entity_property', db.Model.metadata,
-    db.Column('entity_id', db.CHAR(255), db.ForeignKey('entity.id')),
+    db.Column('entity_id', db.CHAR(32), db.ForeignKey('entity.id')),
     db.Column('property_id', db.Integer, db.ForeignKey('property.id'))
 )
 
 entity_tag = db.Table('entity_tag', db.Model.metadata,
-    db.Column('entity_id', db.CHAR(255), db.ForeignKey('entity.id')),
+    db.Column('entity_id', db.CHAR(32), db.ForeignKey('entity.id')),
     db.Column('tag_id', db.Integer, db.ForeignKey('tags.id')))
 # create our database models
 class Access(db.Model):
@@ -35,7 +35,7 @@ class Access(db.Model):
 
 
 class Address(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
+    id = db.Column(db.CHAR(32), primary_key=True)
     street_number = db.Column(db.Integer)
     street_number_suffix = db.Column(db.String)
     street_name = db.Column(db.String)
@@ -87,8 +87,8 @@ class AsylumSeeker(db.Model):
         }
 
 class Attachement(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
-    entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
+    id = db.Column(db.CHAR(32), primary_key=True)
+    entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
     image = db.Column(db.Boolean)
     name = db.Column(db.String)
     date_uploaded = db.Column(db.DateTime)
@@ -96,9 +96,9 @@ class Attachement(db.Model):
     entities = db.relationship('Entity', backref='attachement', lazy=True)
 
 class Comments(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
+    id = db.Column(db.CHAR(32), primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
+    entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
     date_created = db.Column(db.DateTime)
     date_updated = db.Column(db.DateTime)
     flagged = db.Column(db.Boolean)
@@ -113,6 +113,28 @@ class Comments(db.Model):
             'comment' : self.comment
         }
 
+class DataManager(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    first_name = db.Column(db.String)
+    last_name = db.Column(db.String)
+    is_admin = db.Column(db.Boolean)
+
+    def __init__(self, user_id, first_name, last_name):
+        self.user_id = user_id
+        self.first_name = first_name
+        self.last_name = last_name
+
+    @property
+    def serialize(self):
+        return {
+            'user_id' : self.user_id,
+            'first_name' : self.first_name,
+            'last_name' : self.last_name,
+            'is_admin' : self.is_admin
+        }
+
+
 class Day(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     day = db.Column(db.VARCHAR(20))
@@ -120,14 +142,14 @@ class Day(db.Model):
     daytimes = db.relationship('DayTime', backref='day', lazy=True)
 
 class DayTime(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
-    time_id = db.Column(db.CHAR(255), db.ForeignKey('time_block.id'))
+    id = db.Column(db.CHAR(32), primary_key=True)
+    time_id = db.Column(db.CHAR(32), db.ForeignKey('time_block.id'))
     day_id = db.Column(db.Integer, db.ForeignKey('day.id'))
 
 class Email(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
+    id = db.Column(db.CHAR(32), primary_key=True)
     email = db.Column(db.String(255))
-    entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
+    entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
     is_primary = db.Column(db.Boolean)
 
     def __init__(self, email):
@@ -146,7 +168,7 @@ class Email(db.Model):
         }
 
 class Entity(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
+    id = db.Column(db.CHAR(32), primary_key=True)
     name = db.Column(db.String)
     is_searchable = db.Column(db.Boolean)
     marked_deleted = db.Column(db.Boolean)
@@ -160,7 +182,7 @@ class Entity(db.Model):
     user_id = db.Column(db.String)
     website = db.Column(db.String)
 
-    address_id = db.Column(db.CHAR(255), db.ForeignKey('address.id'))
+    address_id = db.Column(db.CHAR(32), db.ForeignKey('address.id'))
 
     attachements = db.relationship('Attachement', backref='entity', lazy=True)
     comments = db.relationship('Comments', backref='entity', lazy=True)
@@ -186,15 +208,15 @@ class Entity(db.Model):
 
 class EntityLanguage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
+    entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
     iso3_language = db.Column(db.CHAR(3))
     description = db.Column(db.Text)
     notes = db.Column(db.Text)
 
 class Organization(db.Model):
     __tablename__ = 'organization'
-    id = db.Column(db.CHAR(255), primary_key=True)
-    entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
+    id = db.Column(db.CHAR(32), primary_key=True)
+    entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
 
     entity = db.relationship('Entity', backref="organization", uselist=False)
     services = db.relationship('Services', backref='organization', lazy=True)
@@ -220,7 +242,7 @@ class Property(db.Model):
 class Phone(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     country_code = db.Column(db.VARCHAR(255))
-    entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
+    entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
     area_code = db.Column(db.VARCHAR(255))
     digits = db.Column(db.VARCHAR(255))
     is_primary = db.Column(db.Boolean)
@@ -235,33 +257,23 @@ class Phone(db.Model):
         }
 
 class Schedule(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
-    entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
-    day_time_id = db.Column(db.CHAR(255), db.ForeignKey('day_time.id'))
+    id = db.Column(db.CHAR(32), primary_key=True)
+    entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
+    day_time_id = db.Column(db.CHAR(32), db.ForeignKey('day_time.id'))
 
     entities = db.relationship('Entity', backref='schedules', lazy=True)
     day_times = db.relationship('DayTime', backref='schedules', lazy=True)
 
 class ServiceProvider(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
+    id = db.Column(db.CHAR(32), primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    type = db.Column(db.String)
-    description = db.Column(db.String)
-    organization_name = db.Column(db.String)
-    about = db.Column(db.String)
-    phone = db.Column(db.String)
-    website = db.Column(db.String)
-    cost = db.Column(db.String)
-    appointment_needed = db.Column(db.Boolean)
-    languages_spoken = db.Column(db.String)
-    who_we_serve = db.Column(db.String)
     verified = db.Column(db.Boolean)
-    entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
+    entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
 
 class Services(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
-    entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
-    parent_organization_id = db.Column(db.CHAR(255), db.ForeignKey('organization.id'))
+    id = db.Column(db.CHAR(32), primary_key=True)
+    entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))
+    parent_organization_id = db.Column(db.CHAR(32), db.ForeignKey('organization.id'))
     appointment = db.Column(db.Boolean)
 
     entity = db.relationship('Entity', backref="services", uselist=False)
@@ -289,7 +301,7 @@ class Tags(db.Model):
         }
 
 class TimeBlock(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
+    id = db.Column(db.CHAR(32), primary_key=True)
     start_time = db.Column(db.Time)
     end_time = db.Column(db.Time)
 
@@ -326,6 +338,6 @@ class Users(db.Model):
 
 
 class UserFavorites(db.Model):
-    id = db.Column(db.CHAR(255), primary_key=True)
+    id = db.Column(db.CHAR(32), primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    entity_id = db.Column(db.CHAR(255), db.ForeignKey('entity.id'))
+    entity_id = db.Column(db.CHAR(32), db.ForeignKey('entity.id'))

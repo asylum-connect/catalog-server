@@ -35,6 +35,7 @@ def parse_query(query):
         TODO: eventually want to clean this up once we connect it to the front
         end
     """
+    # query for tags in one degree is query[tags][]=tag_name
     tags = [tags_mapping(i) for i in query.getlist('query[tags][]')]
 
     sub = 'query[properties]'
@@ -81,7 +82,6 @@ def get_entity(entity):
     """
         Returns a dictionary of entity table columns used in catalog
     """
-    address = entity.address.serialize
     weekly_schedule = get_schedule(entity.schedules)
     properties = get_propertites(entity.properties)
     tags = get_tags(entity.tags)
@@ -90,24 +90,29 @@ def get_entity(entity):
         'comments' : [c.serialize for c in entity.comments],
         'comment_count' : len(entity.comments),
         'emails' : [e.serialize for e in entity.emails],
-        'lat' : address['lat'],
-        'lon' : address['lon'],
-        'location' : address,
         'phones' : [p.serialize for p in entity.phones],
         'properties' : properties,
-        'region' :f"{address['city']}, {address['state']}",
+
         'schedule' : weekly_schedule,
         'tags' : tags
     }
 
+    if (entity.address):
+        address = entity.address.serialize
+        entity_extension['location'] = address
+        entity_extension['lat'] = address['lat']
+        entity_extension['lon'] = address['lon']
+        entity_extension['region'] = f"{address['city']}, {address['state']}"
+
     return dict(entity.serialize, **entity_extension)
 
-def get_object_description(objects, object_type, get_function, iso3_language = 'ENG', limit = 10):
+def get_object_description(objects, object_type, get_function, iso3_language = 'ENG', limit = 20, offset = 0):
     """
         Returns list of dictionaries of selected object with their languages
         specific descriptions
     """
-    object_collection = get_description(objects, object_type, iso3_language).limit(limit).all()
+    temp = get_description(objects, object_type, iso3_language)
+    object_collection = temp.limit(limit).offset(offset).all()
 
     result_object = []
     for object, description in object_collection:
@@ -138,10 +143,12 @@ def get_organization(organization, description):
         'description' : description,
         'opportunity_count' : len(service_collection),
         'opportunity_communitiy_properties' : deduplicate(all_properties),
-        'opportunity_aggregate_ratings' : round(np.mean(all_ratings),1),
         'resource_type' : 'organization',
         'opportunity_tags' : deduplicate(all_tags)
     }
+
+    if(len(all_ratings)):
+        organization_extension['opportunity_aggregate_ratings'] = round(np.mean(all_ratings),1)
 
     organization_extension.update(get_entity(organization.entity))
     return dict(organization.serialize, **organization_extension)
@@ -232,13 +239,15 @@ def filter_object(object, raw_query, range = 5):
     if raw_query:
         query = parse_query(raw_query)
         limit = query['per_page']
+        offset = query['page']
         filtered_object = filter_query(object, query)
 
     else:
-        limit = 10
+        limit = 20
+        offset = 0
         filtered_object = object.query
 
-    return filtered_object, limit
+    return filtered_object, limit, offset
 
 def single_query(object, id, iso3_language = 'ENG',column_name = None):
     result_object = object.query.filter_by(id = id)
@@ -295,11 +304,11 @@ def query_get_organizations():
         specified by client
     """
     iso3_language = 'ENG' # Eventually property of user
-    filtered_organization, limit = filter_object(Organization, request.args)
+    filtered_organization, limit, offset = filter_object(Organization, request.args)
 
-    result = get_object_description(filtered_organization, Organization, get_organization, limit=limit)
+    result = get_object_description(filtered_organization, Organization, get_organization, limit=limit, offset=offset)
 
-    return jsonify(organization = result)
+    return jsonify(organizations = result)
 
 @simpleApp.route('/asylum_connect/api/v1.0/organization/<id>')
 def query_get_organization(id):
@@ -336,13 +345,13 @@ def query_get_services():
     """
         Returns json objects of all services based on filters specified by client
     """
-    filtered_service, limit = filter_object(Services, request.args)
+    filtered_service, limit, offset = filter_object(Services, request.args)
 
     result = get_object_description(filtered_service, Services, get_service, limit=limit)
 
-    return jsonify(opportunities=result)
+    return jsonify(services=result)
 
-@simpleApp.route('/asylum_connect/api/v1.0/service/<id>')
+@simpleApp.route('/asylum_connect/api/v1.0/services/<id>')
 def query_get_service(id):
     """
         Returns single service. If column name is specified will return
@@ -352,7 +361,7 @@ def query_get_service(id):
     if query_result is None:
         return not_found()
     else:
-        return jsonify(opportunity= get_service(*query_result))
+        return jsonify(service= get_service(*query_result))
 
 @simpleApp.route('/asylum_connect/api/v1.0/service/<id>/<column_name>')
 def query_get_service_column(id, column_name):
